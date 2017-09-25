@@ -1,0 +1,15 @@
+
+#同时下载的downloader个数
+mun_downloader = 10
+
+#每秒的请求次数
+rate = 4
+
+# Reruns the downloader regularly after a short pause.
+server_mode = false
+
+# Amount of time between download sessions. Used only if server mode is enabled.
+sleep_time = 60
+
+#下载目录
+directory = "L:\\tumblr"
