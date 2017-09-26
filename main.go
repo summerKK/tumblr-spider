@@ -8,13 +8,16 @@ import (
 	"log"
 	"fmt"
 	"tumblr-spider/module"
+	"os"
+	"os/signal"
+	"syscall"
+	"bufio"
+	"strings"
+	"time"
 )
 
 var VERSION = "1.4.0"
 
-var (
-	pBar = pb.New(0)
-)
 
 func init() {
 	Config.LoadConfig()
@@ -56,12 +59,39 @@ func main() {
 	walkblock := make(chan struct{})
 	go func() {
 		fmt.Println("Scanning directory")
+		//获取下载目录的所有文件
 		module.GetAllCurrentFiles()
 		fmt.Println("Done scanning.")
+		//解除阻塞
 		close(walkblock)
 	}()
 
-	fmt.Println(1)
+	//获取要爬取的目标并初始化
+	userBlogs := getUsersToDownload()
+	//设置用户终端和程序退出后的一些操作
+	setupSignalInfo()
+	//阻塞操作,等待goruntine执行完毕
+	<-walkblock
+	fileChannels := make([]<-chan module.File, len(userBlogs))
+
+	for {
+		limiter := make(chan time.Time, 10*Config.Cfg.RequestRate)
+		//每秒请求速率
+		ticker := time.NewTicker(time.Second / time.Duration(Config.Cfg.RequestRate))
+
+		go func() {
+			for t := range ticker.C {
+				select {
+				case limiter <- t:
+				default:
+				}
+			}
+		}()
+
+		for i, user := range userBlogs {
+			fileChan := module.Scrape(user, limiter)
+		}
+	}
 
 }
 
@@ -81,3 +111,71 @@ func verifyFlags() {
 	}
 
 }
+
+func setupSignalInfo() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGQUIT)
+	go func() {
+		for {
+			s := <-sigChan
+			switch s {
+			//中止信号
+			case syscall.SIGINT:
+				module.Database.Close()
+				module.Gstats.PrintStats()
+				os.Exit(1)
+				//程序退出
+			case syscall.SIGQUIT:
+				module.Gstats.PrintStats()
+			}
+		}
+	}()
+}
+
+func getUsersToDownload() []*module.User {
+
+	//从download读取用户并验证
+	fileResults, err := readUserFile()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var userBlogs []*module.User
+
+	userBlogs = append(userBlogs, fileResults...)
+
+	if len(userBlogs) == 0 {
+		fmt.Fprintln(os.Stderr, "No users detected.")
+		os.Exit(1)
+	}
+	return userBlogs
+}
+
+func readUserFile() ([]*module.User, error) {
+	file, err := os.Open(Config.Cfg.UserFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var users []*module.User
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		text := strings.Trim(scanner.Text(), " \n\r\t")
+		split := strings.SplitN(text, " ", 2)
+
+		b, err := module.NewUser(split[0])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		//user模式为:summer(用户名) photo(标签),如果len(split) > 1代表用户填写了标签,爬取标签的资源
+		if len(split) > 1 {
+			b.Tag = split[1]
+		}
+		users = append(users, b)
+	}
+	return users, scanner.Err()
+}
+

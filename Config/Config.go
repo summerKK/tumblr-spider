@@ -15,11 +15,13 @@ type Config struct {
 	ForceCheck        bool          `toml:"force"`
 	ServerMode        bool          `toml:"server_mode"`
 	ServerSleep       time.Duration `toml:"sleep_time"`
-	DownloadDirectory string        `toml:directory`
+	DownloadDirectory string        `toml:"directory"`
+
+	UserFile string `toml:"user_file"`
 
 	IgnorePhotos    bool `toml:"ignore_photos"`
 	IgnoreVideos    bool `toml:"ignore_videos"`
-	IgnoreAudio     bool `toml:ignore_audio`
+	IgnoreAudio     bool `toml:"ignore_audio"`
 	UserProgressBar bool `toml:"user_progress_bar"`
 
 	Version semver.Version

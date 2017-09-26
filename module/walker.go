@@ -22,6 +22,7 @@ type tracker struct {
 	m map[string]FileStatus
 }
 
+//保存已经在本地存在的文件
 var FileTracker = tracker{m: make(map[string]FileStatus)}
 
 func (f FileStatus) FileInfo() os.FileInfo {

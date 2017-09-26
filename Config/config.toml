@@ -13,3 +13,7 @@ sleep_time = 60
 
 #下载目录
 directory = "L:\\tumblr"
+
+#存放爬取目标的文件
+user_file = "download.txt"
+
