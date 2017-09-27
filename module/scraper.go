@@ -13,6 +13,9 @@ import (
 	"io/ioutil"
 	"sync/atomic"
 	"encoding/json"
+	"regexp"
+	"bytes"
+	"strings"
 )
 
 var (
@@ -23,6 +26,10 @@ var (
 		"regular": parseRegularPost,
 		"video":   parseVideoPost,
 	}
+	gfycatSearch   = regexp.MustCompile(`href="https?:\/\/(?:www\.)?gfycat\.com\/(\w+)`)
+	inlineSearch   = regexp.MustCompile(`(http:\/\/\d{2}\.media\.tumblr\.com\/\w{32}\/tumblr_inline_\w+\.\w+)`)
+	videoSearch    = regexp.MustCompile(`"hdUrl":"(.*\/tumblr_\w+)"`)
+	altVideoSearch = regexp.MustCompile(`source src="(.*tumblr_\w+)(?:\/\d+)?" type`)
 )
 
 const MaxQueueSize = 10000
@@ -96,9 +103,13 @@ func Scrape(u *User, limiter <-chan time.Time) <-chan File {
 				}
 				u.Queue(post)
 			}
+			if len(blog.Posts) < 50 {
+				break
+			}
 		}
 
 	}()
+	return u.FileChannel
 }
 
 func shouldFinishScraping(limiter <-chan time.Time, done <-chan struct{}) bool {
@@ -154,4 +165,74 @@ func ParseDataForFiles(p Post) (files []File) {
 		files = fn(p)
 	}
 	return
+}
+
+func parsePhotoPost(post Post) (files []File) {
+	var id string
+	if !Config.Cfg.IgnorePhotos {
+		if (len(post.Photos) == 0) {
+			f := NewFile(post.PhotoURL)
+			files = append(files, f)
+			id = f.Filename
+		} else {
+			for _, photo := range post.Photos {
+				f := NewFile(photo.PhotoURL)
+				files = append(files, f)
+				id = f.Filename
+			}
+		}
+	}
+
+	if !Config.Cfg.IgnoreVideos {
+		var slug string
+		if len(id) > 26 {
+			slug = id[:26]
+		}
+		files = append(files, getGfycatFiles(post.PhotoCaption, slug)...)
+	}
+	return files
+}
+
+func parseAnswerPost(post Post) (files []File) {
+	if !Config.Cfg.IgnorePhotos {
+		for _, f := range inlineSearch.FindAllString(post.RegularBody, -1) {
+			files = append(files, NewFile(f))
+		}
+	}
+	return files
+}
+
+func parseVideoPost(post Post) (files []File) {
+	if !Config.Cfg.IgnoreVideos {
+		post.Video = bytes.Replace(post.Video, []byte("\\"), []byte(""), -1)
+		regexVideo := videoSearch.FindStringSubmatch(string(post.Video))
+		//hdur is false,我们匹配另外一个url
+		if regexVideo == nil {
+			regexVideo = altVideoSearch.FindStringSubmatch(string(post.Video))
+		}
+
+		//如果还是为空,代表它使用的是别的外链,比如YouTube
+		if regexVideo == nil {
+			return files
+		}
+
+		videoURL := strings.Replace(regexVideo[1], `\`, ``, -1)
+		videoURL += ".mp4"
+
+		f := NewFile(videoURL)
+		files = append(files, f)
+		slug := f.Filename[:23]
+
+		files = append(files, getGfycatFiles(post.VideoCaption, slug)...)
+	}
+	return files
+}
+
+func parseRegularPost(post Post) (files []File) {
+	if !Config.Cfg.IgnorePhotos {
+		for _, f := range inlineSearch.FindAllString(post.RegularBody, -1) {
+			files = append(files, NewFile(f))
+		}
+	}
+	return files
 }

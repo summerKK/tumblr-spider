@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/cheggaaa/pb"
 	"tumblr-spider/Config"
 	"flag"
 	"github.com/blang/semver"
@@ -14,10 +13,10 @@ import (
 	"bufio"
 	"strings"
 	"time"
+	"sync"
 )
 
 var VERSION = "1.4.0"
-
 
 func init() {
 	Config.LoadConfig()
@@ -90,7 +89,47 @@ func main() {
 
 		for i, user := range userBlogs {
 			fileChan := module.Scrape(user, limiter)
+			fileChannels[i] = fileChan
 		}
+
+		done := make(chan struct{})
+		defer close(done)
+
+		mergedFiles := module.Merge(done, fileChannels)
+
+		if Config.Cfg.UserProgressBar {
+			module.Pbar.Start()
+		}
+
+		var downloaderWg sync.WaitGroup
+		downloaderWg.Add(Config.Cfg.NumDownloaders)
+
+		for i := 0; i < Config.Cfg.NumDownloaders; i++ {
+			go func(i int) {
+				module.Downloader(i, limiter, mergedFiles)
+			}(i)
+		}
+
+		downloaderWg.Wait()
+
+		if Config.Cfg.UserProgressBar {
+			module.Pbar.Finish()
+		}
+
+		module.UpdateDatabaseVersion()
+
+		fmt.Println("Downloading complete.")
+
+		module.Gstats.PrintStats()
+
+		if !Config.Cfg.ServerMode {
+			break
+		}
+
+		fmt.Println("Sleeping for", Config.Cfg.ServerSleep)
+		time.Sleep(Config.Cfg.ServerSleep)
+		Config.Cfg.ForceCheck = false
+		ticker.Stop()
 	}
 
 }
@@ -178,4 +217,3 @@ func readUserFile() ([]*module.User, error) {
 	}
 	return users, scanner.Err()
 }
-

@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"io/ioutil"
 	"encoding/json"
+	"sync/atomic"
+	"path"
+	"tumblr-spider/Config"
+	"os"
 )
 
 var userVerificationRegex = regexp.MustCompile(`^[A-za-z0-9\-]+$`)
@@ -116,6 +120,58 @@ func (u *User) UpdateHighestPost(i int64) {
 	u.RUnlock()
 }
 
+func (u *User) incrementFilesFound(i int) {
+	u.DownloadWg.Add(i)
+	atomic.AddUint64(&u.FilesFoud, uint64(i))
+	atomic.AddUint64(&Gstats.FilesFound, uint64(i))
+}
+
 func (u *User) Queue(p Post) {
-	files :=
+	files := ParseDataForFiles(p)
+
+	counter := len(files)
+	if counter == 0 {
+		return
+	}
+	u.incrementFilesFound(counter)
+	timestamp := p.UnixTimestamp
+
+	for _, f := range files {
+		u.ProcessFile(f, timestamp)
+	}
+}
+func (u *User) ProcessFile(file File, timestamp int64) {
+	pathname := path.Join(Config.Cfg.DownloadDirectory, u.Name, file.Filename)
+	//如果文件已经存在我们将跳过文件
+	_, err := os.Stat(pathname)
+	if err == nil {
+		atomic.AddUint64(&Gstats.AlreadyExists, 1)
+		atomic.AddUint64(&u.FilesProcessed, 1)
+		u.DownloadWg.Done()
+		return
+	}
+	//判断是否已经存在过
+	if FileTracker.Add(file.Filename, pathname) {
+		go func(oldfile, newfile string) {
+			FileTracker.WaitForDownload(oldfile)
+			FileTracker.Link(oldfile, newfile)
+			u.DownloadWg.Done()
+			atomic.AddUint64(&u.FilesProcessed, 1)
+			atomic.AddUint64(&Gstats.Hardlinked, 1)
+			atomic.AddUint64(&Gstats.ByresSaved, uint64(FileTracker.m[oldfile].FileInfo().Size()))
+		}(file.Filename, pathname)
+		return
+	}
+	file.User = u
+	file.UnixTimestamp = timestamp
+
+	atomic.AddInt64(&Pbar.Total, 1)
+
+	ShowProgress()
+
+	u.FileChannel <- file
+}
+
+func (u *User) String() string {
+	return u.Name
 }

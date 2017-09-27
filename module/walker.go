@@ -7,6 +7,7 @@ import (
 	"log"
 	"sync"
 	"runtime/debug"
+	"path"
 )
 
 type FileStatus struct {
@@ -91,4 +92,56 @@ func GetAllCurrentFiles() {
 		}
 
 	}
+}
+
+func (t *tracker) Add(name, path string) bool {
+	t.Lock()
+	defer t.Unlock()
+
+	if _, ok := t.m[name]; ok {
+		return true
+	}
+
+	t.m[name] = FileStatus{
+		Name:     name,
+		Path:     path,
+		Priority: 0,
+		Exists:   make(chan struct{}),
+	}
+	return false
+}
+
+func (t *tracker) WaitForDownload(name string) {
+	<-t.m[name].Exists
+}
+
+func (t *tracker) Link(oldfilename, newpath string) {
+	t.Lock()
+	defer t.Unlock()
+	info := t.m[oldfilename]
+	newInfo := FileInfo(newpath)
+	if !os.SameFile(info.FileInfo(), newInfo) {
+		err := os.MkdirAll(path.Dir(newpath), 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+		os.Remove(newpath)
+		err = os.Link(info.Path, newpath)
+		if err != nil {
+			log.Println(info.Path, "-", newpath)
+			log.Fatal("t.link", err)
+		}
+	}
+}
+
+func (t *tracker) Signal(file string) {
+	close(t.m[file].Exists)
+}
+
+func FileInfo(s string) os.FileInfo {
+	file, err := os.Stat(s)
+	if err != nil {
+		log.Fatal("walker.go/FileInfo", err)
+	}
+	return file
 }
