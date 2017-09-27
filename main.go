@@ -52,6 +52,7 @@ func init() {
 	flag.Parse()
 }
 
+//main
 func main() {
 	verifyFlags()
 
