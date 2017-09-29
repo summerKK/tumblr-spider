@@ -68,6 +68,8 @@ func main() {
 
 	//获取要爬取的目标并初始化
 	userBlogs := getUsersToDownload()
+	module.SetupDatabase(userBlogs)
+	defer module.Database.Close()
 	//设置用户终端和程序退出后的一些操作
 	setupSignalInfo()
 	//阻塞操作,等待goruntine执行完毕
