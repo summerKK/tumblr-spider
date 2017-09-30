@@ -31,10 +31,13 @@ type User struct {
 	Name, Tag     string
 	LastPostID    int64
 	HighestPostID int64
+	//用户爬取状态(1.正在爬取;2.正在下载)
 	Status        UserAction
 
 	sync.RWMutex
+	//队列任务
 	FilesFoud      uint64
+	//任务完成
 	FilesProcessed uint64
 
 	Done                 chan struct{}
@@ -44,6 +47,7 @@ type User struct {
 	ScrapeWg, DownloadWg sync.WaitGroup
 }
 
+//通过获取用去的头像去判断用户是否存在
 func NewUser(name string) (*User, error) {
 	if !userVerificationRegex.MatchString(name) {
 		return nil, errors.New("newUser:用户格式不正确:" + name)
@@ -73,6 +77,7 @@ func NewUser(name string) (*User, error) {
 		IdProccessChan:  make(chan int64, 10),
 		FileProcessChan: make(chan int, 10),
 	}
+	//设置全局参数里面增加用户
 	Gstats.NowScraping.Blog[u] = true
 	return u, nil
 }
@@ -83,7 +88,7 @@ func (u *User) GetStatus() string {
 	if u.FilesFoud-u.FilesProcessed > MaxQueueSize {
 		isLimited = "[ LIMITED ]"
 	}
-
+	//被限制的文件,等待中的
 	return fmt.Sprint(u.Name, " - ", u.Status, " ( ", u.FilesProcessed, "/", u.FilesFoud, " ) ", isLimited)
 }
 

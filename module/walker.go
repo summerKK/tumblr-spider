@@ -8,6 +8,7 @@ import (
 	"sync"
 	"runtime/debug"
 	"path"
+	"fmt"
 )
 
 type FileStatus struct {
@@ -55,12 +56,13 @@ func GetAllCurrentFiles() {
 		}
 		//文件夹所有文件,0代表返回所有
 		files, err := dir.Readdirnames(0)
+		fmt.Println(files)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		for _, f := range files {
-			//文件存在
+			//记录在队列里面的文件是否已经下载过
 			if info, ok := FileTracker.m[f]; ok {
 				p := dir.Name() + string(os.PathSeparator) + f
 				//检查文件状态

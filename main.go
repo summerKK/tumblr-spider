@@ -68,17 +68,20 @@ func main() {
 
 	//获取要爬取的目标并初始化
 	userBlogs := getUsersToDownload()
+	//初始化DB
 	module.SetupDatabase(userBlogs)
 	defer module.Database.Close()
 	//设置用户终端和程序退出后的一些操作
 	setupSignalInfo()
 	//阻塞操作,等待goruntine执行完毕
 	<-walkblock
+	//设置一个放置channel的slice,长度等于要爬取的目标长度
 	fileChannels := make([]<-chan module.File, len(userBlogs))
 
 	for {
-		limiter := make(chan time.Time, 10*Config.Cfg.RequestRate)
-		//每秒请求速率
+		//channel的长度等于最大下载数*请求速率
+		limiter := make(chan time.Time, Config.Cfg.NumDownloaders*Config.Cfg.RequestRate)
+		//每秒请求速率(用ticker控制每秒速率,ticker会按速率通过channel发送信号)
 		ticker := time.NewTicker(time.Second / time.Duration(Config.Cfg.RequestRate))
 
 		go func() {
@@ -91,6 +94,7 @@ func main() {
 		}()
 
 		for i, user := range userBlogs {
+			//遍历目标,爬取数据
 			fileChan := module.Scrape(user, limiter)
 			fileChannels[i] = fileChan
 		}
@@ -156,6 +160,7 @@ func verifyFlags() {
 
 func setupSignalInfo() {
 	sigChan := make(chan os.Signal, 1)
+	//监听退出和用户中止信息号
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGQUIT)
 	go func() {
 		for {
@@ -164,10 +169,12 @@ func setupSignalInfo() {
 			//中止信号
 			case syscall.SIGINT:
 				module.Database.Close()
+				//打印现在爬取的状态
 				module.Gstats.PrintStats()
 				os.Exit(1)
-				//程序退出
+			//程序退出
 			case syscall.SIGQUIT:
+				//打印现在爬取的状态(main函数里面自动关闭了database[defer])
 				module.Gstats.PrintStats()
 			}
 		}
@@ -203,8 +210,10 @@ func readUserFile() ([]*module.User, error) {
 	var users []*module.User
 	scanner := bufio.NewScanner(file)
 
+	//每次获取文件的一行读取,知道遇到EOF停止
 	for scanner.Scan() {
 		text := strings.Trim(scanner.Text(), " \n\r\t")
+		//分割成两份
 		split := strings.SplitN(text, " ", 2)
 
 		b, err := module.NewUser(split[0])

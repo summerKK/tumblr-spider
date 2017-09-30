@@ -26,6 +26,7 @@ func SetupDatabase(userBlogs []*User) {
 		}
 
 		for _, blog := range userBlogs {
+			//获取用户名
 			v := b.Get([]byte(blog.Name))
 			if len(v) != 0 {
 				blog.LastPostID, _ = strconv.ParseInt(string(v), 10, 64)

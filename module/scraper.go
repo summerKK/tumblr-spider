@@ -42,6 +42,7 @@ func Scrape(u *User, limiter <-chan time.Time) <-chan File {
 		done := make(chan struct{})
 		closeDone := func() { close(done) }
 		var i, numPosts int
+		//这里defer要放在闭包里面,要不然i的值永远为0
 		defer func() {
 			u.FinishScraping(i)
 		}()

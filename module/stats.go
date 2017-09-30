@@ -42,6 +42,7 @@ func NewGlobalStats() *GlobalStats {
 //打印现在每个正在爬取的目标的状态
 //打印每个正在爬取的目标的scraping和downloading
 func (g *GlobalStats) PrintStats() {
+	//读锁
 	g.NowScraping.RLock()
 	defer g.NowScraping.RUnlock()
 
