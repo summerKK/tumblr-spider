@@ -3,7 +3,7 @@ package module
 import "encoding/json"
 
 type Post struct {
-	ID            json.Number `json:",Number"`
+	ID            json.Number `json:"id,Number"`
 	Type          string
 	PhotoURL      string      `json:"photo-url-1280"`
 	Photos        []Post      `json:"photos,omitempty"`

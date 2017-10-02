@@ -52,6 +52,7 @@ func Scrape(u *User, limiter <-chan time.Time) <-chan File {
 				return
 			}
 
+			//https://shadeykris.tumblr.com/api/read/json?num=49&start=50
 			tumblrURL := makeTumblrURL(u, i)
 			ShowProgress(u.Name, "is on page", i, "/", (numPosts/50)+1)
 
@@ -115,6 +116,7 @@ func Scrape(u *User, limiter <-chan time.Time) <-chan File {
 
 func shouldFinishScraping(limiter <-chan time.Time, done <-chan struct{}) bool {
 	select {
+	//监听channel(done).如果关闭停止爬取
 	case <-done:
 		return true
 	default:
