@@ -100,10 +100,12 @@ func (t *tracker) Add(name, path string) bool {
 	t.Lock()
 	defer t.Unlock()
 
+	//文件已经在队列中
 	if _, ok := t.m[name]; ok {
 		return true
 	}
 
+	//添加文件到队列中
 	t.m[name] = FileStatus{
 		Name:     name,
 		Path:     path,

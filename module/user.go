@@ -103,6 +103,7 @@ func (u *User) DoneScrap() {
 
 func (u *User) FinishScraping(i int) {
 	fmt.Println("Done scraping for", u.Name, " (", i, "pages )")
+	//等待爬取所有目标
 	u.ScrapeWg.Wait()
 	u.Status = Downloading
 
@@ -126,12 +127,15 @@ func (u *User) UpdateHighestPost(i int64) {
 }
 
 func (u *User) incrementFilesFound(i int) {
+	//下载队列+1
 	u.DownloadWg.Add(i)
+	//更新全局参数和目标参数
 	atomic.AddUint64(&u.FilesFoud, uint64(i))
 	atomic.AddUint64(&Gstats.FilesFound, uint64(i))
 }
 
 func (u *User) Queue(p Post) {
+	//根据文件类型解析文件,获取的为文件的url下载地址
 	files := ParseDataForFiles(p)
 
 	counter := len(files)
@@ -145,6 +149,7 @@ func (u *User) Queue(p Post) {
 		u.ProcessFile(f, timestamp)
 	}
 }
+
 func (u *User) ProcessFile(file File, timestamp int64) {
 	pathname := path.Join(Config.Cfg.DownloadDirectory, u.Name, file.Filename)
 	//如果文件已经存在我们将跳过文件
@@ -152,10 +157,11 @@ func (u *User) ProcessFile(file File, timestamp int64) {
 	if err == nil {
 		atomic.AddUint64(&Gstats.AlreadyExists, 1)
 		atomic.AddUint64(&u.FilesProcessed, 1)
+		//下载队列-1 --u.DownloadWg.Add(i) user.go:131
 		u.DownloadWg.Done()
 		return
 	}
-	//判断是否已经存在过
+	//添加到FIleTracker
 	if FileTracker.Add(file.Filename, pathname) {
 		go func(oldfile, newfile string) {
 			FileTracker.WaitForDownload(oldfile)

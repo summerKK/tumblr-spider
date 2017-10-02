@@ -48,6 +48,7 @@ func Scrape(u *User, limiter <-chan time.Time) <-chan File {
 		}()
 
 		for i = 1; ; i++ {
+			//监听 <-done(true) 和 <-limiter(false)
 			if shouldFinishScraping(limiter, done) {
 				return
 			}
@@ -88,23 +89,27 @@ func Scrape(u *User, limiter <-chan time.Time) <-chan File {
 				ioutil.WriteFile("json_error.txt", contents, 0644)
 				log.Println("Unmarshal:", err)
 			}
+			//总文章数量
 			numPosts = blog.TotalPosts
+			//增加一个爬取目标
 			u.ScrapeWg.Add(1)
 			defer u.ScrapeWg.Done()
 
+			//当前页码的所有post
 			for _, post := range blog.Posts {
 				id, err := post.ID.Int64()
 				if err != nil {
 					log.Println(err)
 				}
 				u.UpdateHighestPost(id)
-				//如果没有开启强制检查,获取的id<上一次的postID
+				//如果没有开启强制检查,获取的id<上一次的postID(忽略已经存在的文件,不会去检查文件是否更新过)
 				if !Config.Cfg.ForceCheck && id <= u.LastPostID {
 					once.Do(closeDone)
 					return
 				}
 				u.Queue(post)
 			}
+			//小于50代表到页尾
 			if len(blog.Posts) < 50 {
 				break
 			}
@@ -138,6 +143,7 @@ func makeTumblrURL(user *User, i int) *url.URL {
 	}
 
 	vals := url.Values{}
+	//代表返回的个数,每页的数目
 	vals.Set("num", "50")
 	vals.Add("start", strconv.Itoa((i-1)*50))
 
@@ -163,6 +169,7 @@ func TrimJS(c []byte) []byte {
 }
 
 func ParseDataForFiles(p Post) (files []File) {
+	//根据类型解析文件
 	fn, ok := PostParseMap[p.Type]
 	if ok {
 		files = fn(p)
@@ -172,12 +179,17 @@ func ParseDataForFiles(p Post) (files []File) {
 
 func parsePhotoPost(post Post) (files []File) {
 	var id string
+	//检查是否忽略photo
 	if !Config.Cfg.IgnorePhotos {
+		//检查图片是否有多个
+		//{"post":posts:[]}
 		if (len(post.Photos) == 0) {
+			//返回FIle类型
 			f := NewFile(post.PhotoURL)
 			files = append(files, f)
 			id = f.Filename
 		} else {
+			//{"post":posts:[post:{}]}
 			for _, photo := range post.Photos {
 				f := NewFile(photo.PhotoURL)
 				files = append(files, f)
@@ -189,8 +201,10 @@ func parsePhotoPost(post Post) (files []File) {
 	if !Config.Cfg.IgnoreVideos {
 		var slug string
 		if len(id) > 26 {
+			//文件名不要超过26
 			slug = id[:26]
 		}
+		//获取外链的url
 		files = append(files, getGfycatFiles(post.PhotoCaption, slug)...)
 	}
 	return files

@@ -73,7 +73,7 @@ func main() {
 	defer module.Database.Close()
 	//设置用户终端和程序退出后的一些操作
 	setupSignalInfo()
-	//阻塞操作,等待goruntine执行完毕
+	//阻塞操作,等待获取用户已经下载的所有文件
 	<-walkblock
 	//设置一个放置channel的slice,长度等于要爬取的目标长度
 	fileChannels := make([]<-chan module.File, len(userBlogs))
@@ -114,6 +114,7 @@ func main() {
 		for i := 0; i < Config.Cfg.NumDownloaders; i++ {
 			go func(i int) {
 				module.Downloader(i, limiter, mergedFiles)
+				downloaderWg.Done()
 			}(i)
 		}
 
